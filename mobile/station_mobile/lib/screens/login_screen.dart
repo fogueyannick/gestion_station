@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api.dart';
+import '../services/log_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,7 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final passwordCtrl = TextEditingController();
   bool loading = false;
 
-  final FlutterSecureStorage storage = FlutterSecureStorage();
+  final FlutterSecureStorage storage = const FlutterSecureStorage();
 
   void doLogin() async {
     
@@ -22,8 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final result = await ApiService.login(usernameCtrl.text, passwordCtrl.text);
 
-
-    print("LOGIN RESULT = $result");
+    LogService.info("LOGIN RESULT = $result");
 
     setState(() => loading = false);
 

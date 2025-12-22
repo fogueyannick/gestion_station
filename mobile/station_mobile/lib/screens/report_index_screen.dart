@@ -1,12 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-//import 'login_screen.dart'; // ton écran de login
-import 'package:station_mobile/screens/login_screen.dart';
-
-
+import '../services/log_service.dart';
+import 'login_screen.dart';
 
 class ReportIndexScreen extends StatefulWidget {
   const ReportIndexScreen({super.key});
@@ -126,7 +123,7 @@ class _ReportIndexScreenState extends State<ReportIndexScreen> {
         }
       };
 
-      print("INDEX DATA => $data");
+      LogService.debug("INDEX DATA => $data");
 
       Navigator.pushNamed(
         context,

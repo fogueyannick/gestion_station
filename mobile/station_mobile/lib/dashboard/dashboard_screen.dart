@@ -13,6 +13,7 @@ import 'package:station_mobile/screens/login_screen.dart';
 
 import '../../services/api.dart';
 import '../utils/date_utils.dart'; // pour formatDate
+import '../services/log_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -422,8 +423,8 @@ Future<void> exportPDFComplet(List<Map<String, dynamic>> filteredDay) async {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impossible de supprimer le rapport')));
         }
-      } catch (e) {
-        print("Erreur suppression : $e");
+      } catch (e, stackTrace) {
+        LogService.error("Erreur suppression rapport", e, stackTrace);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur lors de la suppression')));
       }
     }

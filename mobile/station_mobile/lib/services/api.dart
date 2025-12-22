@@ -1,33 +1,42 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../config/api_config.dart';
+import 'log_service.dart';
 
 class ApiService {
-  static const String baseUrl = "http://10.0.2.2:8000/api";
+  static String get baseUrl => ApiConfig.baseUrl;
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
+
+  // Timeout pour les requêtes
+  static const Duration _timeout = Duration(seconds: 30);
 
   // ================= LOGIN =================
   static Future<Map<String, dynamic>?> login(String username, String password) async {
     final url = Uri.parse("$baseUrl/auth/login");
 
     try {
+      LogService.api('POST', '/auth/login');
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json", "Accept": "application/json"},
         body: jsonEncode({"name": username, "password": password}),
-      );
+      ).timeout(_timeout);
+
+      LogService.api('POST', '/auth/login', statusCode: response.statusCode);
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         await _storage.write(key: "token", value: body["access_token"]);
         await _storage.write(key: "role", value: body["role"]);
+        LogService.info("Login réussi pour l'utilisateur: $username");
         return Map<String, dynamic>.from(body);
       } else {
-        print("Login échoué : ${response.body}");
+        LogService.warning("Login échoué: ${response.statusCode} - ${response.body}");
         return null;
       }
-    } catch (e) {
-      print("Erreur login: $e");
+    } catch (e, stackTrace) {
+      LogService.error("Erreur lors du login", e, stackTrace);
       return null;
     }
   }
@@ -54,7 +63,7 @@ class ApiService {
           return {}; // si l’élément n’est pas une Map
         }).toList();
       } else {
-        print("Erreur getRapports: data n’est pas une liste (${data.runtimeType})");
+        LogService.error("getRapports: data n'est pas une liste (${data.runtimeType})");
         return [];
       }
     }
@@ -83,12 +92,12 @@ class ApiService {
         body: jsonEncode(payload),
       );
 
-      print("UPDATE RAPPORT STATUS: ${response.statusCode}");
-      print("UPDATE RAPPORT BODY: ${response.body}");
+      LogService.api('PUT', '/reports/$id', statusCode: response.statusCode);
+      LogService.debug("UPDATE RAPPORT BODY: ${response.body}");
 
       return response.statusCode == 200;
-    } catch (e) {
-      print("Erreur updateRapport: $e");
+    } catch (e, stackTrace) {
+      LogService.error("Erreur updateRapport", e, stackTrace);
       return false;
     }
   }
@@ -106,12 +115,12 @@ class ApiService {
         "Accept": "application/json",
       });
 
-      print("DELETE RAPPORT STATUS: ${response.statusCode}");
-      print("DELETE RAPPORT BODY: ${response.body}");
+      LogService.api('DELETE', '/reports/$id', statusCode: response.statusCode);
+      LogService.debug("DELETE RAPPORT BODY: ${response.body}");
 
       return response.statusCode == 200 || response.statusCode == 204;
-    } catch (e) {
-      print("Erreur deleteRapport: $e");
+    } catch (e, stackTrace) {
+      LogService.error("Erreur deleteRapport", e, stackTrace);
       return false;
     }
   }

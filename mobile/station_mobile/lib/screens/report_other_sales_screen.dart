@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/log_service.dart';
 
 class ReportOtherSalesScreen extends StatefulWidget {
   final Map<String, dynamic>? data;
@@ -105,7 +106,7 @@ class _ReportOtherSalesScreenState extends State<ReportOtherSalesScreen> {
         fullData["commandes"] = [];
       }
 
-      print("OTHER SALES DATA => $fullData");
+      LogService.debug("OTHER SALES DATA => $fullData");
 
       Navigator.pushNamed(
         context,
