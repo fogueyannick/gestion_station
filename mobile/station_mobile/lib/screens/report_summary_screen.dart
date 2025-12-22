@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import '../services/log_service.dart';
+import '../config/api_config.dart';
 
 class ReportSummaryScreen extends StatefulWidget {
   const ReportSummaryScreen({super.key});
@@ -12,7 +14,6 @@ class ReportSummaryScreen extends StatefulWidget {
 }
 
 class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
-  static const String baseUrl = "http://10.0.2.2:8000/api";
   final FlutterSecureStorage storage = const FlutterSecureStorage();
 
   late Map<String, dynamic> data;
@@ -64,7 +65,7 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     if (token == null) return false;
 
     final request =
-        http.MultipartRequest("POST", Uri.parse("$baseUrl/reports"));
+        http.MultipartRequest("POST", Uri.parse("${ApiConfig.baseUrl}/reports"));
 
     request.headers.addAll({
       "Authorization": "Bearer $token",
@@ -161,11 +162,11 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return true;
       } else {
-        debugPrint("❌ ${response.statusCode} => $body");
+        LogService.error("Erreur envoi rapport: ${response.statusCode} => $body");
         return false;
       }
-    } catch (e) {
-      debugPrint("❌ Exception => $e");
+    } catch (e, stackTrace) {
+      LogService.error("Exception lors de l'envoi du rapport", e, stackTrace);
       return false;
     }
   }

@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\DailyReport; // nécessaire pour la relation
+use App\Models\Report;
 
 class Station extends Model
 {
@@ -16,8 +16,8 @@ class Station extends Model
     ];
 
     // Relation : une station a plusieurs rapports
-    public function dailyReports()
+    public function reports()
     {
-        return $this->hasMany(DailyReport::class);
+        return $this->hasMany(Report::class);
     }
 }

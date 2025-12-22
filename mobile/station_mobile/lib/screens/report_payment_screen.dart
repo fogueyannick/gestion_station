@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/log_service.dart';
 
 class ReportPaymentScreen extends StatefulWidget {
   const ReportPaymentScreen({super.key});
@@ -36,8 +37,8 @@ class _ReportPaymentScreenState extends State<ReportPaymentScreen> {
       };
 
       // 🔹 Debug : voir exactement ce qui sera transmis
-      print("PAYMENT DATA => $fullData");
-      print("PAYMENT DATA => $previousData");
+      LogService.debug("PAYMENT DATA => $fullData");
+      LogService.debug("PAYMENT DATA PREVIOUS => $previousData");
       
       // 🔹 Navigation vers le résumé
       Navigator.pushNamed(

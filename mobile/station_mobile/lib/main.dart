@@ -15,6 +15,9 @@ import 'screens/report_summary_screen.dart';
 // Dashboard
 import 'dashboard/dashboard_screen.dart';
 
+// Theme
+import 'theme/app_theme.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -37,6 +40,7 @@ class StationApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: "Station Service",
+      theme: AppTheme.lightTheme, // Appliquer le thème
       home: const SplashScreen(),
       routes: {
         "/login": (context) => const LoginScreen(),
@@ -96,12 +100,22 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> checkLogin() async {
-    // ⚠️ À supprimer en production (utilisé ici pour test)
-    await storage.delete(key: "token");
-    await storage.delete(key: "role");
+    final token = await storage.read(key: "token");
+    final role = await storage.read(key: "role");
 
-    // Redirection vers login
-    Navigator.pushReplacementNamed(context, "/login");
+    // Si token et rôle existent, rediriger vers l'écran approprié
+    if (token != null && role != null) {
+      if (role == "gerant") {
+        Navigator.pushReplacementNamed(context, "/dashboard");
+      } else if (role == "pompiste") {
+        Navigator.pushReplacementNamed(context, "/report_index");
+      } else {
+        Navigator.pushReplacementNamed(context, "/login");
+      }
+    } else {
+      // Pas de session, redirection vers login
+      Navigator.pushReplacementNamed(context, "/login");
+    }
   }
 
   @override

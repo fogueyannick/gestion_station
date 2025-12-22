@@ -5,7 +5,8 @@ namespace App\Models;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use App\Models\DailyReport;
+use App\Models\Report;
+use Illuminate\Support\Facades\Log;
 
 class User extends Authenticatable
 {
@@ -24,8 +25,16 @@ class User extends Authenticatable
         'remember_token',
     ];
 
-    public function dailyReports()
+    public function reports()
     {
-        return $this->hasMany(DailyReport::class);
+        return $this->hasMany(Report::class);
+    }
+
+    public function totalDepenses()
+    {
+        return Report::all()->sum(function($r) {
+            return array_sum($r->depenses ?? []);
+        });
     }
 }
+
