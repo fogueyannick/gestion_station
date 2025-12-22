@@ -36,6 +36,7 @@ class ReportController extends Controller
             'autres_ventes'  => 'nullable|array',
             'commandes'      => 'nullable|array',
 
+            // Note: Consider limiting file size (e.g., max:2048 for 2MB) in production
             'photos.*' => 'nullable|image',
         ]);
 
@@ -52,9 +53,25 @@ class ReportController extends Controller
             }
         }
 
+        // 📊 Calculate sales by comparing with previous day's report
+        $previousReport = Report::where('station_id', $validated['station_id'])
+            ->where('user_id', Auth::id()) // comparer avec le dernier rapport du même user
+            ->where('date', '<', $validated['date'])
+            ->orderBy('date', 'desc')
+            ->first();
+
+        $superSales = ($validated['super1_index'] + $validated['super2_index'] + $validated['super3_index'])
+            - ($previousReport ? ($previousReport->super1_index + $previousReport->super2_index + $previousReport->super3_index) : 0);
+
+        $gazoilSales = ($validated['gazoil1_index'] + $validated['gazoil2_index'] + $validated['gazoil3_index'])
+            - ($previousReport ? ($previousReport->gazoil1_index + $previousReport->gazoil2_index + $previousReport->gazoil3_index) : 0);
+
+        $totalSales = $superSales + $gazoilSales;
+
         $report = Report::updateOrCreate(
             [
                 'station_id' => $validated['station_id'],
+                'user_id'    => Auth::id(), // unique par station + user + date
                 'date'       => $validated['date'],
             ],
             [
@@ -67,6 +84,11 @@ class ReportController extends Controller
                 'gazoil1_index' => $validated['gazoil1_index'],
                 'gazoil2_index' => $validated['gazoil2_index'],
                 'gazoil3_index' => $validated['gazoil3_index'],
+
+                // Calculated sales
+                'super_sales'  => $superSales,
+                'gazoil_sales' => $gazoilSales,
+                'total_sales'  => $totalSales,
 
                 'stock_sup_9000'  => $validated['stock_sup_9000'],
                 'stock_sup_10000' => $validated['stock_sup_10000'],
@@ -99,7 +121,7 @@ class ReportController extends Controller
     public function index()
     {
         return response()->json(
-            Report::with('station','user')->orderBy('date', 'desc')->get()
+            Report::with('station','user')->orderBy('date', 'desc')->paginate(20)
         );
     }
 
@@ -134,6 +156,7 @@ class ReportController extends Controller
             'commandes'      => 'nullable|array',
 
             // Photos (multipart)
+            // Note: Consider limiting file size (e.g., max:2048 for 2MB) in production
             'photos.*' => 'nullable|image',
         ]);
 
@@ -197,12 +220,22 @@ class ReportController extends Controller
     {
         $totalReports = Report::count();
         $totalVersements = Report::sum('versement');
-        $totalDepenses = Report::sum('depenses');
+        
+        // depenses is a JSON array field, need to sum the array values
+        $totalDepenses = Report::all()->sum(function($r) {
+            return array_sum($r->depenses ?? []);
+        });
+        
+        // autres_ventes is also a JSON array field
+        $totalAutresVentes = Report::all()->sum(function($r) {
+            return array_sum($r->autres_ventes ?? []);
+        });
 
         return response()->json([
-            'total_reports'   => $totalReports,
-            'total_versements'=> $totalVersements,
-            'total_depenses'  => $totalDepenses,
+            'total_reports'      => $totalReports,
+            'total_versements'   => $totalVersements,
+            'total_depenses'     => $totalDepenses,
+            'total_autres_ventes'=> $totalAutresVentes,
         ]);
     }
 

@@ -17,6 +17,8 @@ return [
 
     'allowed_methods' => ['*'],
 
+    // SECURITY WARNING: ['*'] allows all origins (development only)
+    // In production, restrict to specific origins: ['https://yourdomain.com']
     'allowed_origins' => ['*'], // ou ['http://localhost:5173'] pour limiter
 
     'allowed_headers' => ['*'],

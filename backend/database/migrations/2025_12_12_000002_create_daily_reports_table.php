@@ -46,13 +46,13 @@ return new class extends Migration
 
             $table->timestamps();
 
-            // Unique par station + user + date
+            // Unique par station + utilisateur + date (un seul rapport par station par utilisateur par jour)
             $table->unique(['station_id', 'user_id', 'date']);
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('daily_reports');
+        Schema::dropIfExists('reports');
     }
 };
