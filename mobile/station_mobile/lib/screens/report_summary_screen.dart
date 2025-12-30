@@ -1,8 +1,15 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+
 
 class ReportSummaryScreen extends StatefulWidget {
   const ReportSummaryScreen({super.key});
@@ -12,7 +19,8 @@ class ReportSummaryScreen extends StatefulWidget {
 }
 
 class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
-  static const String baseUrl = "http://10.0.2.2:8000/api";
+  static const String baseUrl = "https://gestion-station-backend-1.onrender.com/api";
+  //static const String baseUrl = "http://10.0.2.2:8000/api";
   final FlutterSecureStorage storage = const FlutterSecureStorage();
 
   late Map<String, dynamic> data;
@@ -58,13 +66,29 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     return result;
   }
 
+
+  Future<Object> compressImage(File file) async {
+    final dir = await getTemporaryDirectory();
+    final targetPath = p.join(
+      dir.path,
+      "${DateTime.now().millisecondsSinceEpoch}.jpg",
+    );
+
+    final result = await FlutterImageCompress.compressAndGetFile(
+      file.absolute.path,
+      targetPath,
+      quality: 60, // 🔥 clé ici (50–70 recommandé)
+    );
+
+    return result ?? file;
+  }
+
   // ================= ENVOI =================
   Future<bool> sendReport() async {
     final token = await storage.read(key: "token");
     if (token == null) return false;
 
-    final request =
-        http.MultipartRequest("POST", Uri.parse("$baseUrl/reports"));
+    final request = http.MultipartRequest("POST", Uri.parse("$baseUrl/reports"));
 
     request.headers.addAll({
       "Authorization": "Bearer $token",
@@ -83,8 +107,7 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
           int.parse(p[0]),
         ).toIso8601String().split("T")[0];
       } else {
-        formattedDate =
-            DateTime.parse(raw).toIso8601String().split("T")[0];
+        formattedDate = DateTime.parse(raw).toIso8601String().split("T")[0];
       }
     } catch (_) {
       return false;
@@ -94,62 +117,55 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     request.fields.addAll({
       "station_id": "1",
       "date": formattedDate,
-
       "super1_index": data["super1"].toString(),
       "super2_index": data["super2"].toString(),
       "super3_index": data["super3"].toString(),
-
       "gazoil1_index": data["gaz1"].toString(),
       "gazoil2_index": data["gaz2"].toString(),
       "gazoil3_index": data["gaz3"].toString(),
-
       "stock_sup_9000": data["stock_sup_9000"].toString(),
       "stock_sup_10000": data["stock_sup_10000"].toString(),
       "stock_sup_14000": data["stock_sup_14000"].toString(),
       "stock_gaz_10000": data["stock_gaz_10000"].toString(),
       "stock_gaz_6000": data["stock_gaz_6000"].toString(),
-
       "versement": data["depot_banque"].toString(),
-
     });
 
-    final depenses = data["depenses"] as List<dynamic>? ?? [];
-    for (int i = 0; i < depenses.length; i++) {
-      request.fields["depenses[$i][nom]"] =
-          depenses[i]["nom"].toString();
-      request.fields["depenses[$i][montant]"] =
-          depenses[i]["montant"].toString();
+    // -------- LISTES --------
+    void addListField(String name, List<dynamic> items) {
+      for (int i = 0; i < items.length; i++) {
+        items[i].forEach((key, value) {
+          request.fields["$name[$i][$key]"] = value.toString();
+        });
+      }
     }
 
-    final autresVentes = data["autres_ventes"] as List<dynamic>? ?? [];
-    for (int i = 0; i < autresVentes.length; i++) {
-      request.fields["autres_ventes[$i][nom]"] =
-          autresVentes[i]["nom"].toString();
-      request.fields["autres_ventes[$i][montant]"] =
-          autresVentes[i]["montant"].toString();
-    }
-
-    final commandes = data["commandes"] as List<dynamic>? ?? [];
-    for (int i = 0; i < commandes.length; i++) {
-      request.fields["commandes[$i][produit]"] =
-          commandes[i]["produit"].toString();
-      request.fields["commandes[$i][quantite]"] =
-          commandes[i]["quantite"].toString();
-      request.fields["commandes[$i][livraison]"] =
-          commandes[i]["livraison"].toString();
-    }
+    addListField("depenses", data["depenses"] ?? []);
+    addListField("autres_ventes", data["autres_ventes"] ?? []);
+    addListField("commandes", data["commandes"] ?? []);
 
     // -------- PHOTOS --------
     final photos = data["photos"] as Map<String, dynamic>? ?? {};
+    int i = 0;
+
     for (final entry in photos.entries) {
-      final file = entry.value;
-      if (file is File && file.existsSync()) {
+      final compressed = await compressImage(entry.value);
+
+      File file;
+      if (compressed is File) {
+        file = compressed;
+      } else if (compressed is XFile) {
+        file = File(compressed.path);
+      } else {
+        file = File((compressed as dynamic).path);
+      }
+
+      if (file.existsSync()) {
         request.files.add(
-          await http.MultipartFile.fromPath(
-            "photos[${entry.key}]",
-            file.path,
-          ),
+          await http.MultipartFile.fromPath("photos[$i]", file.path),
         );
+        request.fields["photos_keys[$i]"] = entry.key;
+        i++;
       }
     }
 

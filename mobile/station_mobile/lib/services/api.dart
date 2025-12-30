@@ -3,7 +3,9 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
-  static const String baseUrl = "http://10.0.2.2:8000/api";
+  //static const String baseUrl = "http://10.0.2.2:8000/api";
+  static const String baseUrl = "https://gestion-station-backend-1.onrender.com/api";
+
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
   // ================= LOGIN =================
@@ -46,15 +48,17 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-
+      print(data);
       // Vérifie que c’est bien une liste
       if (data is List) {
         return data.map<Map<String, dynamic>>((r) {
           if (r is Map) return Map<String, dynamic>.from(r);
+          print(r);
           return {}; // si l’élément n’est pas une Map
         }).toList();
       } else {
         print("Erreur getRapports: data n’est pas une liste (${data.runtimeType})");
+
         return [];
       }
     }
