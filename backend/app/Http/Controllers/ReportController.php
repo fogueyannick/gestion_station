@@ -7,6 +7,11 @@ use App\Models\Report;      // Use the correct Report model
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
+use App\Services\GcsUploader;
+
+use Google\Cloud\Storage\StorageClient;
+
+
 class ReportController extends Controller
 {
     /**
@@ -14,9 +19,6 @@ class ReportController extends Controller
      */
     public function store(Request $request)
     {
-        \Log::info('RAW SIZE', [
-            'content_length' => request()->server('CONTENT_LENGTH'),
-        ]);
         $validated = $request->validate([
             'station_id' => 'required|integer|exists:stations,id',
             'date' => 'required|date',
@@ -40,32 +42,30 @@ class ReportController extends Controller
             'autres_ventes'  => 'nullable|array',
             'commandes'      => 'nullable|array',
 
-            'photos'       => 'nullable',
-            'photos.*'     => 'file|image|max:5120', // 5 MB
-            'photos_keys'  => 'nullable|array',
-            'photos_keys.*'=> 'string',
-
-
+            // Pour Option 2 : photos envoyées via signed URL
+            'photos_keys' => 'nullable|array',
+            'photos_keys.*' => 'string',
+            'photos_urls' => 'nullable|array',
+            'photos_urls.*' => 'url',
         ]);
 
         // Préparer les tableaux JSON
         $depenses = array_values($request->input('depenses', []));
         $autresVentes = array_values($request->input('autres_ventes', []));
         $commandes = array_values($request->input('commandes', []));
-        
-        $rawDate = trim($validated['date']);
 
+        // Parse date
+        $rawDate = trim($validated['date']);
         $date = str_contains($rawDate, '/')
             ? Carbon::createFromFormat('d/m/Y', $rawDate)
             : Carbon::parse($rawDate);
-
         $date = $date->startOfDay();
 
         // Créer ou mettre à jour le rapport
         $report = Report::updateOrCreate(
             [
                 'station_id' => $validated['station_id'],
-                'user_id'    => Auth::id(),   // ✅ OBLIGATOIRE
+                'user_id'    => Auth::id(),
                 'date'       => $date,
             ],
             [
@@ -87,54 +87,77 @@ class ReportController extends Controller
             ]
         );
 
-        //dd($request->file('photos'), $request->input('photos_keys'));
+        // -------------------------
+        // Photos Option 2 : URLs
+        // -------------------------
+        $photosKeys = $request->input('photos_keys', []);
+        $photosUrls = $request->input('photos_urls', []);
 
-        // Gérer les photos envoyées depuis Flutter
-        \Log::info('FILES TER', [
-            'hasPhotos' => $request->hasFile('photos'),
-            'files' => $request->file('photos'),
-            'keys' => $request->input('photos_keys'),
-        ]);
-
-        // Récupérer les photos et leurs clés envoyées par Flutter
-        $photos = $request->file('photos');       // tableau d'UploadedFile
-        $keys   = $request->input('photos_keys'); // tableau de clés ['super1', 'gaz2', ...]
-
-        // Tableau pour stocker le JSON final
         $storedPhotos = [];
-
-        if ($photos && $keys) {
-            foreach ($photos as $index => $photo) {
-                $key = $keys[$index] ?? "photo_$index"; // fallback si clé manquante
-
-                // Stocker le fichier dans storage/app/public/reports/{report_id}
-                $path = $photo->store("reports/{$report->id}", 'public');
-
-                // Ajouter au tableau de photos à sauvegarder en DB
+        for ($i = 0; $i < count($photosKeys); $i++) {
+            if (!empty($photosKeys[$i]) && !empty($photosUrls[$i])) {
                 $storedPhotos[] = [
-                    'key'  => $key,
-                    'path' => $path,
+                    'key' => $photosKeys[$i],
+                    'url' => $photosUrls[$i],
                 ];
             }
         }
 
-        // Sauvegarder les chemins en JSON dans la colonne 'photos'
         $report->photos = json_encode($storedPhotos);
         $report->save();
 
-        // Log pour vérifier côté serveur
-        \Log::info('PHOTOS SAVED', [
+        // Log pour debug
+        \Log::info('REPORT STORED', [
+            'report_id' => $report->id,
             'photos' => $storedPhotos,
         ]);
-
-        //print($photos);
-
 
         return response()->json([
             'message' => 'Rapport enregistré',
             'report'  => $report->load('user','station'),
         ], 201);
     }
+
+
+
+    public function signedUrl(Request $request)
+    {
+        $request->validate([
+            'key' => 'required|string',       // ex: super1
+            'extension' => 'required|string'  // ex: jpg
+        ]);
+
+        $storage = new StorageClient([
+            'projectId' => env('GOOGLE_CLOUD_PROJECT'),
+            'keyFilePath' => storage_path('app/gcs-key.json'),
+        ]);
+
+        $bucket = $storage->bucket(env('GOOGLE_CLOUD_BUCKET'));
+
+        // Génère un nom unique pour le fichier
+        $objectName = 'reports/' . uniqid() . '.' . $request->extension;
+
+        $object = $bucket->object($objectName);
+
+        // Générer le signed URL pour upload (PUT)
+        $uploadUrl = $object->signedUrl(
+            now()->addMinutes(10),         // expire dans 10 min
+            [
+                'method' => 'PUT',
+                'contentType' => 'image/jpeg',
+            ]
+        );
+
+        // URL publique qui sera stockée en DB
+        $publicUrl = "https://storage.googleapis.com/" . env('GOOGLE_CLOUD_BUCKET') . "/" . $objectName;
+
+        return response()->json([
+            'upload_url' => $uploadUrl,
+            'public_url' => $publicUrl,
+            'objectName' => $objectName,
+        ]);
+    }
+
 
 
     /**

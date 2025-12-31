@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -83,13 +84,11 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     return result ?? file;
   }
 
-  // ================= ENVOI =================
   Future<bool> sendReport() async {
     final token = await storage.read(key: "token");
     if (token == null) return false;
 
     final request = http.MultipartRequest("POST", Uri.parse("$baseUrl/reports"));
-
     request.headers.addAll({
       "Authorization": "Bearer $token",
       "Accept": "application/json",
@@ -109,7 +108,8 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
       } else {
         formattedDate = DateTime.parse(raw).toIso8601String().split("T")[0];
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint("❌ Erreur parsing date: $e");
       return false;
     }
 
@@ -117,25 +117,25 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     request.fields.addAll({
       "station_id": "1",
       "date": formattedDate,
-      "super1_index": data["super1"].toString(),
-      "super2_index": data["super2"].toString(),
-      "super3_index": data["super3"].toString(),
-      "gazoil1_index": data["gaz1"].toString(),
-      "gazoil2_index": data["gaz2"].toString(),
-      "gazoil3_index": data["gaz3"].toString(),
-      "stock_sup_9000": data["stock_sup_9000"].toString(),
-      "stock_sup_10000": data["stock_sup_10000"].toString(),
-      "stock_sup_14000": data["stock_sup_14000"].toString(),
-      "stock_gaz_10000": data["stock_gaz_10000"].toString(),
-      "stock_gaz_6000": data["stock_gaz_6000"].toString(),
-      "versement": data["depot_banque"].toString(),
+      "super1_index": data["super1"]?.toString() ?? '',
+      "super2_index": data["super2"]?.toString() ?? '',
+      "super3_index": data["super3"]?.toString() ?? '',
+      "gazoil1_index": data["gaz1"]?.toString() ?? '',
+      "gazoil2_index": data["gaz2"]?.toString() ?? '',
+      "gazoil3_index": data["gaz3"]?.toString() ?? '',
+      "stock_sup_9000": data["stock_sup_9000"]?.toString() ?? '',
+      "stock_sup_10000": data["stock_sup_10000"]?.toString() ?? '',
+      "stock_sup_14000": data["stock_sup_14000"]?.toString() ?? '',
+      "stock_gaz_10000": data["stock_gaz_10000"]?.toString() ?? '',
+      "stock_gaz_6000": data["stock_gaz_6000"]?.toString() ?? '',
+      "versement": data["depot_banque"]?.toString() ?? '',
     });
 
     // -------- LISTES --------
     void addListField(String name, List<dynamic> items) {
       for (int i = 0; i < items.length; i++) {
         items[i].forEach((key, value) {
-          request.fields["$name[$i][$key]"] = value.toString();
+          request.fields["$name[$i][$key]"] = value?.toString() ?? '';
         });
       }
     }
@@ -160,28 +160,72 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
         file = File((compressed as dynamic).path);
       }
 
-      if (file.existsSync()) {
-        request.files.add(
-          await http.MultipartFile.fromPath("photos[$i]", file.path),
+      if (!file.existsSync()) continue;
+
+      try {
+        // 1️⃣ Récupérer signed URL PUT depuis le backend
+        final urlResponse = await http.post(
+          Uri.parse("$baseUrl/signed-url"),
+          headers: {
+            "Authorization": "Bearer $token",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          body: jsonEncode({
+            "key": entry.key,
+            "extension": "jpg",
+          }),
         );
+
+        if (urlResponse.statusCode != 200) {
+          debugPrint("❌ Erreur signed URL pour ${entry.key}");
+          return false;
+        }
+
+        final jsonData = Map<String, dynamic>.from(jsonDecode(urlResponse.body));
+        final uploadUrl = jsonData["upload_url"] as String? ?? '';
+        final publicUrl = jsonData["public_url"] as String? ?? '';
+
+        if (uploadUrl.isEmpty) {
+          debugPrint("❌ uploadUrl vide pour ${entry.key}");
+          return false;
+        }
+
+        // 2️⃣ Upload direct sur GCS
+        final uploadResponse = await http.put(
+          Uri.parse(uploadUrl),
+          headers: {"Content-Type": "image/jpeg"},
+          body: await file.readAsBytes(),
+        );
+
+        if (uploadResponse.statusCode != 200 &&
+            uploadResponse.statusCode != 201) {
+          debugPrint(
+              "❌ Erreur upload ${entry.key} : ${uploadResponse.statusCode}");
+          return false;
+        }
+
+        // 3️⃣ Ajouter URL publique dans le multipart request
         request.fields["photos_keys[$i]"] = entry.key;
+        request.fields["photos_urls[$i]"] = publicUrl;
         i++;
+      } catch (e) {
+        debugPrint("❌ Exception upload photo ${entry.key}: $e");
+        return false;
       }
     }
 
-    // -------- ENVOI --------
+    // -------- ENVOI FINAL --------
     try {
       final response = await request.send();
       final body = await response.stream.bytesToString();
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return true;
-      } else {
-        debugPrint("❌ ${response.statusCode} => $body");
-        return false;
-      }
+      debugPrint("📦 STATUS: ${response.statusCode}");
+      debugPrint("📦 BODY: $body");
+
+      return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      debugPrint("❌ Exception => $e");
+      debugPrint("❌ Exception lors de l'envoi: $e");
       return false;
     }
   }
